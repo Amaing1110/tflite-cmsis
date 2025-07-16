@@ -3,8 +3,39 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include "SpeechRecognitionPipeline.hpp"
+
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+
+//#define USE_PRUNED
+
+#include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/micro/micro_log.h"
+#include "tensorflow/lite/micro/micro_profiler.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "SpeechRecognitionPipeline.hpp"
+#ifdef USE_PRUNED
+#include "models/tiny_wav2letter_pruned_int8.cc"
+#else
+#include "models/tiny_wav2letter_int8.cc"
+#endif
+#include "cmsis_compiler.h"
+#include "app_mem.h"
+
+tflite::MicroProfiler profiler;
+using SpeeckRecOpResolver = tflite::MicroMutableOpResolver<7>;
+static SpeeckRecOpResolver op_resolver;
+
+// Arena size is a guesstimate, followed by use of
+// MicroInterpreter::arena_used_bytes() on both the AudioPreprocessor and
+// MicroSpeech models and using the larger of the two results.
+constexpr size_t kArenaSize = 4000*1024;
+
+L2_RET_BSS_SECT_BEGIN(app_psram_ret_cache)
+APP_L2_RET_BSS_SECT(app_psram_ret_cache, ALIGN(16) static uint8_t g_arena[kArenaSize]);
+L2_RET_BSS_SECT_END
 
 namespace asr 
 {
@@ -33,12 +64,26 @@ std::vector<int8_t> ASRPipeline::PreProcessing(std::vector<float>& audio)
                                  m_preProcessor->m_windowStride);
     int outputBufferSize = m_preProcessor->m_mfcc->m_params.m_numMfccVectors
                            * m_preProcessor->m_mfcc->m_params.m_numMfccFeatures * 3;
-    std::vector<int8_t> outputBuffer(outputBufferSize);
-    //m_preProcessor->Invoke(audio.data(), audioDataToPreProcess, outputBuffer, m_executor->GetQuantizationOffset(),
-    //                       m_executor->GetQuantizationScale());
+    static std::vector<int8_t> outputBuffer(outputBufferSize);
+    
+    TfLiteTensor* input = m_executor->input(0);    
+    float quant_scale = input->params.scale;
+    int quant_offset = input->params.zero_point;
+    m_preProcessor->Invoke(audio.data(), audioDataToPreProcess, outputBuffer, quant_offset, quant_scale);
     return outputBuffer;
 }
 
+TfLiteStatus RegisterOps(SpeeckRecOpResolver& op_resolver) 
+{
+  TF_LITE_ENSURE_STATUS(op_resolver.AddReshape());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddFullyConnected());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddDepthwiseConv2D());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddConv2D());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddAveragePool2D());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddSoftmax());
+  TF_LITE_ENSURE_STATUS(op_resolver.AddLeakyRelu());
+  return kTfLiteOk;
+}
 IPipelinePtr CreatePipeline(common::PipelineOptions& config, std::map<int, std::string>& labels) 
 {
     if (config.m_ModelName == "Wav2Letter") 
@@ -70,9 +115,30 @@ IPipelinePtr CreatePipeline(common::PipelineOptions& config, std::map<int, std::
         //auto executor = std::make_unique<common::ArmnnNetworkExecutor<int8_t>>(config.m_ModelFilePath,
         //                                                                       config.m_backends);
 
-        tflite::MicroInterpreter * executor;
-        auto decoder = std::make_unique<asr::Decoder>(labels);
+        tflite::MicroInterpreter * executor; 
 
+#ifdef USE_PRUNED
+        const tflite::Model* model = tflite::GetModel(tiny_wav2letter_pruned_int8_tflite);
+#else
+        const tflite::Model* model = tflite::GetModel(tiny_wav2letter_int8_tflite);
+#endif
+        TfLiteStatus r=RegisterOps(op_resolver);
+
+        if (kTfLiteOk!=r)
+            MicroPrintf("Could not Register OPs: %d.", r);
+        else {    
+            
+            executor=new tflite::MicroInterpreter(model, op_resolver, g_arena, kArenaSize, NULL, &profiler);
+            r=executor->AllocateTensors();
+            if (kTfLiteOk!=r) {
+                MicroPrintf("Could not Allocate tensors: %d.", r);
+            }
+            else {
+                MicroPrintf("Speech Recognition model arena size = %u", executor->arena_used_bytes());
+            }
+        }    
+        
+        auto decoder = std::make_unique<asr::Decoder>(labels);
         auto preprocessor = std::make_unique<Wav2LetterPreprocessor>(MFCC_WINDOW_LEN, MFCC_WINDOW_STRIDE,
                                                                      std::move(mfccInst));
 
@@ -86,6 +152,7 @@ IPipelinePtr CreatePipeline(common::PipelineOptions& config, std::map<int, std::
     else
     {
         MicroPrintf("Unknown Model name: %s." , config.m_ModelName.c_str());
+        return nullptr;
     }
 }
 

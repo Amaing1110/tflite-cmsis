@@ -16,12 +16,6 @@
 
 #define CACHE_SIZE 0x200000
 
-#ifdef _MSC_VER
-    #define APP_L2_RET_BSS_SECT(section_name, var)         var
-#else
-    #define APP_L2_RET_BSS_SECT(section_name, var)         var L2_RET_BSS_SECT(section_name)
-#endif
-
 /**
 for L2_MEM(PSRAM).
 */

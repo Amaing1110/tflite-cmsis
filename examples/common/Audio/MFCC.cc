@@ -287,7 +287,7 @@ void MFCC::MfccComputePreFeature(const std::vector<float>& audioData)
 }
 
 std::vector<float> MFCC::MfccCompute(const std::vector<float>& audioData)
-{
+{    
     this->MfccComputePreFeature(audioData);
 
     std::vector<float> mfccOut(this->m_params.m_numMfccFeatures);
@@ -301,7 +301,8 @@ std::vector<float> MFCC::MfccCompute(const std::vector<float>& audioData)
                 ++i, j += this->m_params.m_numFbankBins) 
     {
 #ifdef ARM_DSP    
-        arm_mult_f32(ptrDct + j, ptrMel, ptrMfcc, this->m_params.m_numFbankBins);
+        arm_dot_prod_f32(ptrDct + j, ptrMel, this->m_params.m_numFbankBins, ptrMfcc);
+        ptrMfcc++;
 #else
         *ptrMfcc++ = MathUtils::DotProductF32(
                 ptrDct + j,

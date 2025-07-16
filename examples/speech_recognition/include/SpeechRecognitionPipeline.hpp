@@ -96,6 +96,7 @@ public:
 
         std::vector<T> contextToProcess;
 
+        MicroPrintf("PostProcessing 1, %d", isFirstWindow);
         // If isFirstWindow we keep the left context of the output
         if (isFirstWindow) 
         {
@@ -111,9 +112,11 @@ public:
             contextToProcess = chunk;
         }
         std::string output = this->m_decoder->DecodeOutput<T>(contextToProcess);
+        MicroPrintf("PostProcessing 2, %d", output.length());
         isFirstWindow = false;
         MicroPrintf(output.c_str());
 
+        MicroPrintf("PostProcessing 3, %d", isLastWindow);
         // If this is the last window, we print the right context of the output
         if (isLastWindow) 
         {
@@ -121,6 +124,7 @@ public:
                                     &inferenceResult[0][rightContextEnd * rowLength]);
             currentRContext = this->m_decoder->DecodeOutput(rContext);
             
+            MicroPrintf("PostProcessing 4, %d", output.length());
             MicroPrintf(currentRContext.c_str());
         }
     }

@@ -28,6 +28,14 @@ typedef enum
     IMAGE_CACHE_PSRAM
 } image_cache_t;
 
+
+#ifdef _MSC_VER
+    #define APP_L2_RET_BSS_SECT(section_name, var)         var
+#else
+    #define APP_L2_RET_BSS_SECT(section_name, var)         var L2_RET_BSS_SECT(section_name)
+#endif
+
+
 /**
 @brief apply cache mem for solution applicaiton.
 @param[in] size Size of cache mem

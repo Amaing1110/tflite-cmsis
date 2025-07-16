@@ -5,7 +5,6 @@ cwd = GetCurrentDir()
 
 # Add source code
 src = Glob('*.cpp')
-src += Glob('models/*.cc')
 src += Glob('testdata/*.cc')
 inc = [cwd, cwd+'/../include']
 

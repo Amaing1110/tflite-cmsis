@@ -12,7 +12,7 @@
 #include "AudioCapture.hpp"
 #include "SpeechRecognitionPipeline.hpp"
 #include "Wav2LetterMFCC.hpp"
-
+#include "testdata/audio_samples.h"
 
 std::map<int, std::string> labels = 
 {
@@ -60,9 +60,13 @@ int tf_main(int argc, char* argv[])
 
     asr::IPipelinePtr asrPipeline = asr::CreatePipeline(pipelineOptions, labels);
 
-    audio::AudioCapture capture;
-    std::vector<float> audioData;
-    //= audio::AudioCapture::LoadAudioFile(GetSpecifiedOption(options, AUDIO_FILE_PATH));
+    audio::AudioCapture capture;    
+    //std::vector<float> audioData;
+    //audio::AudioCapture::LoadAudioFile(GetSpecifiedOption(options, AUDIO_FILE_PATH));
+    std::vector<float> audioData(audio_samples, audio_samples + audio_samples_length);
+    
+
+    MicroPrintf("Init Sliding window, %d", asrPipeline->getSlidingWindowOffset());
     capture.InitSlidingWindow(audioData.data(), audioData.size(), asrPipeline->getInputSamplesSize(),
                               asrPipeline->getSlidingWindowOffset());
 
