@@ -70,9 +70,13 @@ static void kws_led_init()
 {
     MicroPrintf("Starting LED initialization...");
     
-    // 配置外设LDO电源
+    // 配置外设LDO电源（仅黄山派开发板需要）
+#ifdef BSP_USING_BOARD_SF32LB52_LCHSPI_ULP
     HAL_PMU_ConfigPeriLdo(PMU_PERI_LDO3_3V3, true, true);
-    MicroPrintf("LDO power configured");
+    MicroPrintf("LDO power configured for SF32LB52-LCHSPI-ULP board");
+#else
+    MicroPrintf("Skip LDO configuration (not SF32LB52-LCHSPI-ULP board)");
+#endif
     
     // 配置PA32引脚为PWM2通道1（按照ws2812示例的配置）
     HAL_PIN_Set(PAD_PA32, GPTIM2_CH1, PIN_NOPULL, 1);
